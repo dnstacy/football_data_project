@@ -5,6 +5,7 @@ import sys
 from pprint import pprint
 import pandas as pd
 from collections import defaultdict
+import csv
 
 def get_teams():
     teams = requests.get("https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams")
@@ -24,6 +25,31 @@ def get_team_stats(year, team_id, stat_dict):
             stat_dict[stat_name].append(stat_value)
 
     return stat_dict
+
+def get_schedule_results(year, team_id):
+    games = requests.get(f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?limit=1000&dates={year}&seasontype=2")
+    games_json = json.loads(games.text)
+    results = []
+    for event in games_json["events"]:
+        week_num = event["week"]["number"]
+        if "name" in event["competitions"][0]["competitors"][0]["team"].keys() and "name" in event["competitions"][0]["competitors"][1]["team"].keys():
+            team1 = event["competitions"][0]["competitors"][0]["team"]["name"]
+            team2 = event["competitions"][0]["competitors"][1]["team"]["name"]
+            if event["competitions"][0]["competitors"][0]["winner"]:
+                winner = team1
+                loser = team2
+            else:
+                winner = team2
+                loser = team1
+        results.append({"week": week_num, "winner": winner, "loser": loser})
+
+    fields = ["week", "winner", "loser"]
+    with open(f"{year}_season_results.csv", "w") as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(results)
+
+    return results
 
 def rank_teams_by_feature(stat_df, feature):
    return stat_df.sort_values(by=[feature])
@@ -72,6 +98,8 @@ def calculate_field_goal_pct(stat_df):
 def main(argv):
     teams = get_teams()
     stat_dict = defaultdict(list)
+    results = get_schedule_results(2023, "")
+
     for team in teams:
         team_name = team["team"]["name"]
         stat_dict["Team"].append(team_name)
@@ -88,4 +116,3 @@ def main(argv):
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv))
-
