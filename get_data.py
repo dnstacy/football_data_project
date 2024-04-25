@@ -6,6 +6,9 @@ from pprint import pprint
 import pandas as pd
 from collections import defaultdict
 import csv
+import matplotlib.pyplot as plt
+from datetime import datetime
+from datetime import timezone
 
 def get_teams():
     teams = requests.get("https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams")
@@ -30,18 +33,24 @@ def get_schedule_results(year, team_id):
     games = requests.get(f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?limit=1000&dates={year}&seasontype=2")
     games_json = json.loads(games.text)
     results = []
+    for daterange in games_json["leagues"][0]["calendar"]:
+        if daterange["label"] == "Regular Season":
+            start_date = datetime.fromisoformat(daterange["startDate"][:-1]).astimezone(timezone.utc)
+            end_date = datetime.fromisoformat(daterange["endDate"][:-1]).astimezone(timezone.utc)
     for event in games_json["events"]:
-        week_num = event["week"]["number"]
-        if "name" in event["competitions"][0]["competitors"][0]["team"].keys() and "name" in event["competitions"][0]["competitors"][1]["team"].keys():
-            team1 = event["competitions"][0]["competitors"][0]["team"]["name"]
-            team2 = event["competitions"][0]["competitors"][1]["team"]["name"]
-            if event["competitions"][0]["competitors"][0]["winner"]:
-                winner = team1
-                loser = team2
-            else:
-                winner = team2
-                loser = team1
-        results.append({"week": week_num, "winner": winner, "loser": loser})
+        formatted_date = datetime.fromisoformat(event["competitions"][0]["date"][:-1]).astimezone(timezone.utc)
+        if formatted_date <= end_date and formatted_date >= start_date:
+            week_num = event["week"]["number"]
+            if "name" in event["competitions"][0]["competitors"][0]["team"].keys() and "name" in event["competitions"][0]["competitors"][1]["team"].keys():
+                team1 = event["competitions"][0]["competitors"][0]["team"]["name"]
+                team2 = event["competitions"][0]["competitors"][1]["team"]["name"]
+                if event["competitions"][0]["competitors"][0]["winner"]:
+                    winner = team1
+                    loser = team2
+                else:
+                    winner = team2
+                    loser = team1
+            results.append({"week": week_num, "winner": winner, "loser": loser})
 
     fields = ["week", "winner", "loser"]
     with open(f"{year}_season_results.csv", "w") as csvfile:
@@ -99,7 +108,9 @@ def main(argv):
     teams = get_teams()
     stat_dict = defaultdict(list)
     results = get_schedule_results(2023, "")
+    team_records = {}
 
+    """
     for team in teams:
         team_name = team["team"]["name"]
         stat_dict["Team"].append(team_name)
@@ -108,11 +119,20 @@ def main(argv):
         team_id = team["team"]["id"]
         stat_dict = get_team_stats(2023, team_id, stat_dict)
 
+        team_records[team_name] = 0
+
+    for game in results:
+        winner = game["winner"]
+        team_records[winner] += 1
+
     stat_df = pd.DataFrame(stat_dict)
     field_goal_pct = calculate_field_goal_pct(stat_df)
     for key in field_goal_pct:
         stat_df[key] = field_goal_pct[key]
 
+    # print(stat_df[["Location", "fumblesGeneral"]])
+    pprint(team_records)
+    """
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv))
